@@ -54,17 +54,6 @@ def health():
     }), 200
 
 
-@app.route("/health/secrets", methods=["GET"])
-def check_secret_configuration():
-    secret_configured = bool(
-        os.environ.get("CARTFLOW_DEMO_MESSAGE", "").strip()
-    )
-
-    return jsonify({
-        "key_vault_secret_configured": secret_configured
-    }), 200 if secret_configured else 503
-
-
 @app.route("/api/v1/products", methods=["GET"])
 def list_products():
     category = request.args.get("category")

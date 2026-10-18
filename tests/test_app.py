@@ -204,22 +204,3 @@ def test_metrics_summary_after_orders(client):
     assert data["metrics"]["total_revenue_usd"] > 0
     assert data["metrics"]["catalog_size"] == len(CATALOG)
 
-
-def test_health_secrets_returns_200_when_secret_is_configured(monkeypatch):
-    monkeypatch.setenv("CARTFLOW_DEMO_MESSAGE", "test-secret-value")
-
-    response = app.test_client().get("/health/secrets")
-
-    assert response.status_code == 200
-    assert response.get_json()["key_vault_secret_configured"] is True
-    assert "test-secret-value" not in response.get_data(as_text=True)
-
-
-def test_health_secrets_returns_503_when_secret_is_missing(monkeypatch):
-    monkeypatch.delenv("CARTFLOW_DEMO_MESSAGE", raising=False)
-
-    response = app.test_client().get("/health/secrets")
-
-    assert response.status_code == 503
-    assert response.get_json()["key_vault_secret_configured"] is False
-
