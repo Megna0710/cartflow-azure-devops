@@ -1,0 +1,64 @@
+
+name: Terraform CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "terraform-azure/**"
+      - ".github/workflows/terraform-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "terraform-azure/**"
+      - ".github/workflows/terraform-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  terraform:
+    name: Terraform Format, Validate and Plan
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: terraform-azure
+
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.5"
+
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive
+
+      - name: Log in to Azure using OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Initialize Terraform
+        run: terraform init -input=false
+
+      - name: Validate Terraform
+        run: terraform validate
+
+      - name: Create Terraform plan
+        run: terraform plan -input=false -no-color

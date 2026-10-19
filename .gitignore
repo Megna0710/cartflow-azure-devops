@@ -9,6 +9,7 @@ crash.log
 crash.*.log
 terraform-azure/provider-schema.json
 cartflow-review.json
+**/state-local-backup.json
 
 # Keep provider lock files under version control
 !**/.terraform.lock.hcl
