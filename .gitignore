@@ -1,12 +1,19 @@
-# Terraform
-terraform/.terraform/
-terraform/.terraform.lock.hcl
-terraform/tfplan
-terraform.tfstate
-terraform.tfstate.backup
+
+# Terraform - all configurations
+**/.terraform/*
+*.tfstate
+*.tfstate.*
 *.tfvars
-!terraform/terraform.tfvars.example
-terraform/.terraform.lock.hcl
+*.tfplan
+crash.log
+crash.*.log
+
+# Keep provider lock files under version control
+!**/.terraform.lock.hcl
+
+# Keep example variable files
+!**/*.tfvars.example
+
 
 # Python
 __pycache__/
