@@ -138,6 +138,7 @@ resource "azurerm_container_app" "cartflow" {
     prevent_destroy = true
 
     ignore_changes = [
+      template[0].container[0].image,
       secret
     ]
   }
