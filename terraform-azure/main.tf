@@ -86,7 +86,7 @@ resource "azurerm_container_app" "cartflow" {
 
     container {
       name   = "cartflow-api"
-      image = "cartflowmegna2026.azurecr.io/cartflow:e76e7a34dd21b39968c6915941e33c942f17f651"
+      image  = "cartflowmegna2026.azurecr.io/cartflow:e76e7a34dd21b39968c6915941e33c942f17f651"
       cpu    = 0.5
       memory = "1Gi"
 
