@@ -8,22 +8,26 @@ on:
     paths:
       - "terraform-azure/**"
       - ".github/workflows/terraform-ci.yml"
+
   push:
     branches:
       - main
     paths:
       - "terraform-azure/**"
       - ".github/workflows/terraform-ci.yml"
+
   workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write
+  pull-requests: write
 
 jobs:
   terraform:
     name: Terraform Format, Validate and Plan
     runs-on: ubuntu-latest
+    environment: terraform-plan-review
 
     defaults:
       run:
@@ -67,6 +71,7 @@ jobs:
 
       - name: Create Terraform plan
         id: plan
+        continue-on-error: true
         run: |
           set -o pipefail
           terraform plan -input=false -no-color 2>&1 | tee terraform-plan-output.txt
@@ -74,13 +79,13 @@ jobs:
       - name: Add plan summary to workflow
         if: always()
         env:
-          JOB_RESULT: ${{ job.status }}
+          JOB_RESULT: ${{ steps.plan.outcome }}
         run: |
           {
             echo "## Terraform Plan Summary"
             echo ""
-            echo "- **Result:** ${JOB_RESULT}"
-            echo "- **Branch:** ${GITHUB_REF_NAME}"
+            echo "- **Plan result:** ${JOB_RESULT}"
+            echo "- **Branch:** ${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
             echo "- **Commit:** ${GITHUB_SHA}"
             echo ""
 
@@ -96,9 +101,124 @@ jobs:
               elif grep -q 'No changes\.' terraform-plan-output.txt; then
                 echo "**No infrastructure changes required.**"
               else
-                echo "Plan counts are unavailable. Check the Terraform plan step logs."
+                echo "Plan counts are unavailable. Check the plan logs."
               fi
             else
               echo "Terraform plan output was not generated."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on pull request
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          PLAN_RESULT: ${{ steps.plan.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'terraform-azure/terraform-plan-output.txt';
+            let result = `**Plan result:** ${process.env.PLAN_RESULT}`;
+            let changes = 'Plan counts are unavailable. Check the workflow logs.';
+
+            if (fs.existsSync(path)) {
+              const output = fs.readFileSync(path, 'utf8');
+              const match = output.match(/^Plan: \d+ to add, \d+ to change, \d+ to destroy\./m);
+
+              if (match) {
+                changes = `\`\`\`text\n${match[0]}\n\`\`\``;
+              } else if (output.includes('No changes.')) {
+                changes = '**No infrastructure changes required.**';
+              }
+            }
+
+            const body = [
+              '<!-- terraform-plan-summary -->',
+              '## Terraform Plan Summary',
+              '',
+              result,
+              '',
+              changes,
+              '',
+              '_Review the full Terraform plan in the Actions logs. This workflow does not apply changes._'
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              { owner, repo, issue_number, per_page: 100 }
+            );
+
+            const existing = comments.find(
+              comment =>
+                comment.user?.type === 'Bot' &&
+                comment.body?.includes('<!-- terraform-plan-summary -->')
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body
+              });
+            }
+
+      - name: Comment Terraform plan on pull request
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        env:
+          PLAN_RESULT: ${{ job.status }}
+        with:
+          script: |
+            const fs = require('fs');
+
+            const summary = fs.existsSync(
+              'terraform-azure/terraform-plan-output.txt'
+            )
+              ? fs.readFileSync(
+                  'terraform-azure/terraform-plan-output.txt',
+                  'utf8'
+                )
+              : 'Terraform plan output was not generated. Check the workflow logs.';
+
+            const counts = summary.match(
+              /^Plan: \d+ to add, \d+ to change, \d+ to destroy\./m
+            );
+
+            const noChanges = /No changes\./.test(summary);
+
+            const body = [
+              '## Terraform Plan Review',
+              '',
+              `**Workflow result:** ${process.env.PLAN_RESULT}`,
+              '',
+              counts
+                ? `**Proposed changes:** ${counts[0]}`
+                : noChanges
+                  ? '**Proposed changes:** No infrastructure changes.'
+                  : '**Proposed changes:** See workflow logs for details.',
+              '',
+              'Review the full Terraform plan in the Actions run before merging.',
+              '',
+              `Workflow commit: ${context.sha}`
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
+
+      - name: Fail if Terraform plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
