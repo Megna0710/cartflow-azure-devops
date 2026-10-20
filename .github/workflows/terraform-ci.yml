@@ -66,4 +66,20 @@ jobs:
         run: terraform validate
 
       - name: Create Terraform plan
-        run: terraform plan -input=false -no-color
+        id: plan
+        run: |
+          set -o pipefail
+          terraform plan -input=false -no-color 2>&1 | tee terraform-plan-output.txt
+
+      - name: Add plan summary to workflow
+        if: always()
+        run: |
+          {
+            echo "## Terraform Plan Summary"
+            echo ""
+            echo "- **Result:** ${{ job.status }}"
+            echo "- **Branch:** \`${GITHUB_REF_NAME}\`"
+            echo "- **Commit:** \`${GITHUB_SHA}\`"
+            echo ""
+            echo "Review the **Create Terraform plan** step above for the full output."
+          } >> "$GITHUB_STEP_SUMMARY"
