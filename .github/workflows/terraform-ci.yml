@@ -73,13 +73,32 @@ jobs:
 
       - name: Add plan summary to workflow
         if: always()
+        env:
+          JOB_RESULT: ${{ job.status }}
         run: |
           {
             echo "## Terraform Plan Summary"
             echo ""
-            echo "- **Result:** ${{ job.status }}"
-            echo "- **Branch:** \`${GITHUB_REF_NAME}\`"
-            echo "- **Commit:** \`${GITHUB_SHA}\`"
+            echo "- **Result:** ${JOB_RESULT}"
+            echo "- **Branch:** ${GITHUB_REF_NAME}"
+            echo "- **Commit:** ${GITHUB_SHA}"
             echo ""
-            echo "Review the **Create Terraform plan** step above for the full output."
+
+            if [[ -f terraform-plan-output.txt ]]; then
+              counts=$(grep -E '^Plan: [0-9]+ to add, [0-9]+ to change, [0-9]+ to destroy\.' terraform-plan-output.txt || true)
+
+              if [[ -n "$counts" ]]; then
+                echo "### Resource changes"
+                echo ""
+                echo '```text'
+                echo "$counts"
+                echo '```'
+              elif grep -q 'No changes\.' terraform-plan-output.txt; then
+                echo "**No infrastructure changes required.**"
+              else
+                echo "Plan counts are unavailable. Check the Terraform plan step logs."
+              fi
+            else
+              echo "Terraform plan output was not generated."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
