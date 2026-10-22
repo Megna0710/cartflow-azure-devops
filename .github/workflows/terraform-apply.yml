@@ -19,7 +19,7 @@ concurrency:
 jobs:
   plan:
     name: Generate Terraform Plan
-    if: github.ref == 'refs/heads/main' && inputs.confirm_apply == 'apply'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     defaults:
@@ -85,7 +85,7 @@ jobs:
   apply:
     name: Approve and Apply Terraform Plan
     needs: plan
-    if: github.ref == 'refs/heads/main' && inputs.confirm_apply == 'apply'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: terraform-apply
 
