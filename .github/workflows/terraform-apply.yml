@@ -43,6 +43,15 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
+      - name: Verify manual authorization input
+        env:
+          CONFIRM_APPLY: ${{ inputs.confirm_apply }}
+        run: |
+          if [[ "$CONFIRM_APPLY" != "apply" ]]; then
+            echo "Error: Enter 'apply' in the confirmation field."
+            exit 1
+          fi
+
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
