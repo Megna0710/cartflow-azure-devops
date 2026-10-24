@@ -9,7 +9,7 @@ terraform {
     key                  = "cartflow-terraform.tfstate"
 
     use_azuread_auth = true
-    use_cli          = true
+    use_oidc         = true
   }
 
   required_providers {
