@@ -32,7 +32,7 @@ jobs:
       TF_INPUT: "false"
       TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: "true"
-      ARM_USE_CLI: "false"
+      ARM_USE_CLI: "true"
       ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
@@ -67,15 +67,6 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Configure Terraform OIDC environment
-        run: |
-          if [[ -z "$ACTIONS_ID_TOKEN_REQUEST_URL" || -z "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]]; then
-            echo "Error: GitHub OIDC request credentials are unavailable."
-            exit 1
-          fi
-          echo "ARM_OIDC_REQUEST_URL=$ACTIONS_ID_TOKEN_REQUEST_URL" >> "$GITHUB_ENV"
-          echo "ARM_OIDC_REQUEST_TOKEN=$ACTIONS_ID_TOKEN_REQUEST_TOKEN" >> "$GITHUB_ENV"
-
       - name: Verify Azure identity
         run: |
           az account show \
@@ -83,7 +74,7 @@ jobs:
             --output json
 
       - name: Initialize Terraform
-        run: terraform init -input=false
+        run: terraform init -reconfigure -input=false
 
       - name: Validate Terraform
         run: terraform validate
@@ -123,7 +114,7 @@ jobs:
       TF_INPUT: "false"
       TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: "true"
-      ARM_USE_CLI: "false"
+      ARM_USE_CLI: "true"
       ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
@@ -147,7 +138,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Initialize Terraform
-        run: terraform init -input=false
+        run: terraform init -reconfigure -input=false
 
       - name: Download saved plan
         uses: actions/download-artifact@v4
