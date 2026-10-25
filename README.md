@@ -1,791 +1,513 @@
-# CartFlow Commerce Platform
+# CartFlow --- Azure DevOps Project
 
-> **Production-Grade GitOps Pipeline for Cloud-Native E-Commerce on AWS EKS**
+A containerized Flask API deployed to **Azure Container Apps**, with
+infrastructure managed by **Terraform**, CI/CD automated using **GitHub
+Actions**, and security and monitoring capabilities integrated into the
+delivery workflow.
 
-[![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://python.org)
-[![Flask](https://img.shields.io/badge/Flask-3.0-000000?logo=flask&logoColor=white)](https://flask.palletsprojects.com)
-[![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)](https://docker.com)
-[![Terraform](https://img.shields.io/badge/Terraform-IaC-7B42BC?logo=terraform&logoColor=white)](https://terraform.io)
-[![Jenkins](https://img.shields.io/badge/Jenkins-CI%2FCD-D24939?logo=jenkins&logoColor=white)](https://jenkins.io)
-[![AWS EKS](https://img.shields.io/badge/AWS-EKS-FF9900?logo=amazonaws&logoColor=white)](https://aws.amazon.com/eks)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.31-326CE5?logo=kubernetes&logoColor=white)](https://kubernetes.io)
-[![Ansible](https://img.shields.io/badge/Ansible-Automation-EE0000?logo=ansible&logoColor=white)](https://ansible.com)
-[![Tests](https://img.shields.io/badge/Tests-24%20Passed-22C55E)](tests/)
-[![License](https://img.shields.io/badge/License-MIT-22C55E)](#license)
+> **Live application:**
+> https://cartflow-api.thankfulforest-0f061758.centralindia.azurecontainerapps.io\
+> **Health endpoint:**
+> https://cartflow-api.thankfulforest-0f061758.centralindia.azurecontainerapps.io/health
 
----
+![CartFlow Azure DevOps
+Architecture](docs/images/02-project-architecture.png)
 
-## 1. Project Overview
+## Table of Contents
 
-**CartFlow** is a fictional cloud-native E-Commerce SaaS platform built and operated by **CartFlow Inc.** It demonstrates a production-grade GitOps engineering pipeline where every aspect of the software lifecycle — application code, infrastructure provisioning, server configuration, access control, and deployment — is fully automated, version-controlled, and reproducible.
+-   [Project Overview](#project-overview)
+-   [Architecture](#architecture)
+-   [Technology Stack](#technology-stack)
+-   [Application Endpoints](#application-endpoints)
+-   [CI/CD Workflow](#cicd-workflow)
+-   [Infrastructure as Code](#infrastructure-as-code)
+-   [Identity and Secrets](#identity-and-secrets)
+-   [Security](#security)
+-   [Monitoring and Alerting](#monitoring-and-alerting)
+-   [Repository Structure](#repository-structure)
+-   [Screenshots](#screenshots)
+-   [Run Locally](#run-locally)
+-   [Deployment and Verification](#deployment-and-verification)
+-   [Key Learning Outcomes](#key-learning-outcomes)
+-   [Future Improvements](#future-improvements)
 
-The platform exposes a RESTful Commerce API for product catalog management, order processing, and real-time business metrics — deployed immutably on AWS Elastic Kubernetes Service (EKS) through a 7-stage Jenkins CI/CD pipeline with zero manual intervention.
+## Project Overview
 
-| Attribute | Details |
-|---|---|
-| **Platform Name** | CartFlow Commerce Platform |
-| **Company** | CartFlow Inc. |
-| **API Version** | v1 (2.0.0) |
-| **Deployment Target** | AWS EKS (us-east-1) |
-| **Pipeline** | Jenkins (on-premise) + GitHub Actions (cloud) |
-| **Cluster** | Kubernetes 1.31 — Multi-AZ, Self-Healing |
-| **Test Coverage** | 24 automated test cases — 100% passing |
+CartFlow is a Flask-based API used to demonstrate an end-to-end Azure
+DevOps workflow. The project combines application testing, container
+image creation, registry storage, cloud deployment, repeatable
+infrastructure provisioning, repository security controls, and
+operational monitoring.
 
-### Target Users
+### Goals
 
-- **DevOps & Platform Engineers** studying GitOps architecture patterns
-- **Engineering Managers** evaluating infrastructure automation maturity
-- **Hiring Managers & Recruiters** reviewing portfolio-grade cloud projects
-- **Software Engineers** transitioning into cloud-native DevOps roles
+-   Automate application validation and deployment with GitHub Actions.
+-   Package the application as a Docker image and publish it to Azure
+    Container Registry (ACR).
+-   Run the application in Azure Container Apps.
+-   Provision and manage cloud resources with Terraform.
+-   Use GitHub Actions OIDC federation to authenticate to Azure without
+    storing a long-lived Azure client secret in GitHub.
+-   Store Terraform remote state in Azure Blob Storage.
+-   Configure Azure Key Vault for secret storage.
+-   Collect Container Apps logs in Log Analytics and create an Azure
+    Monitor CPU alert with email notifications.
+-   Enable GitHub security features, including CodeQL, secret
+    protection, push protection, and Dependabot alerts.
 
-### Business Value
+## Architecture
 
-CartFlow demonstrates how engineering teams eliminate manual deployment errors, enforce security boundaries, and achieve consistent, repeatable releases — reducing deployment time from hours to minutes while maintaining full auditability.
+The high-level flow is:
 
----
+1.  A developer commits code or opens a pull request in GitHub.
+2.  GitHub Actions checks out the repository, sets up Python, installs
+    dependencies, runs tests, performs configured security checks,
+    builds the Docker image, and publishes it to ACR.
+3.  The deployment workflow updates the Azure Container App to use the
+    image from ACR.
+4.  Terraform manages the Azure infrastructure and stores its state in a
+    remote Azure Blob Storage backend.
+5.  GitHub Actions authenticates to Azure using Microsoft Entra ID
+    federated credentials (OIDC).
+6.  Azure Container Apps emits console and system logs to the connected
+    Log Analytics workspace.
+7.  Azure Monitor evaluates the configured CPU percentage alert and uses
+    the `cartflow-alerts` action group to send email notifications.
 
-## 2. Business Problem
+### Azure resources used
 
-### Existing Challenges
+  Resource                          Name / purpose
+  --------------------------------- ------------------------------
+  Resource group                    `cartflow-rg`
+  Azure Container App               `cartflow-api`
+  Container Apps environment        `cartflow-env`
+  Azure Container Registry          `cartflowmegna2026`
+  Log Analytics workspace           `workspacecartflowrgb3e8`
+  Azure Key Vault                   `cartflow-kv-megna-2026`
+  Terraform state storage account   `cartflowtfstate2026`
+  Terraform state container         `tfstate`
+  Terraform state blob              `cartflow-terraform.tfstate`
+  Azure Monitor CPU alert           `CartFlow-High-CPU-Alert`
+  Alert action group                `cartflow-alerts`
 
-Modern e-commerce operations face critical engineering bottlenecks that slow delivery and introduce risk:
+> **Security note:** Do not commit secret values, access keys,
+> connection strings, Terraform state contents, or other credentials to
+> this repository. Screenshots should hide email addresses and sensitive
+> identifiers where appropriate.
 
-| Challenge | Business Impact |
-|---|---|
-| Manual deployments prone to human error | Unplanned downtime, revenue loss, customer churn |
-| Static credentials stored in scripts | Security breaches, compliance failures |
-| Infrastructure created by hand | Unreproducible environments, configuration drift |
-| SSH-based server management | Exposed attack surface, key management overhead |
-| No automated testing gates | Bugs reach production, increasing cost of failure |
-| Ad-hoc team access management | Audit failures, over-privileged users |
+## Technology Stack
 
-### Why CartFlow Was Built
+  -----------------------------------------------------------------------
+  Area                                Technologies
+  ----------------------------------- -----------------------------------
+  Application                         Python, Flask
 
-CartFlow addresses each of these problems through a GitOps-first engineering philosophy: **Git is the single source of truth** for code, infrastructure, configuration, and access. Nothing is created, changed, or deleted outside of a versioned commit.
+  Containerization                    Docker
 
----
+  Container registry                  Azure Container Registry
 
-## 3. Objectives
+  Runtime                             Azure Container Apps
 
-### Primary Objectives
-- Build a fully automated GitOps pipeline from commit to production deployment
-- Eliminate all manual steps from the software delivery lifecycle
-- Enforce zero-trust access patterns using AWS IAM role assumption
+  CI/CD                               GitHub Actions
 
-### Technical Objectives
-- Deploy a containerized Flask API to AWS EKS with rolling update strategy
-- Provision all cloud infrastructure using Terraform IaC with remote state
-- Configure EKS worker nodes via Ansible over AWS SSM — no SSH required
-- Implement 7-stage CI/CD pipeline with automated test gates
+  Infrastructure as Code              Terraform
 
-### Business Objectives
-- Achieve sub-5-minute deployment cycles for application changes
-- Enforce least-privilege access across 5 teams and 20 engineers
-- Maintain complete audit trails for every deployment via CloudTrail
-- Enable zero-downtime deployments with Kubernetes RollingUpdate strategy
+  Cloud identity                      Microsoft Entra ID, federated
+                                      identity / OIDC
 
-### Expected Outcomes
-- 100% automated deployment pipeline requiring no manual intervention
-- Full infrastructure reproducibility — `terraform apply` recreates everything from zero
-- Comprehensive test coverage — 24 automated tests validating all API behaviors
-- Complete observability — CloudWatch metrics, logs, and audit events
+  Secrets                             Azure Key Vault
 
----
+  Remote Terraform state              Azure Blob Storage
 
-## 4. Key Features
+  Logs                                Azure Container Apps logs, Azure
+                                      Log Analytics
 
-| Feature | Description | Business Benefit |
-|---|---|---|
-| **GitOps Pipeline** | Every change flows through Git — code, infra, config, access | Single source of truth — full traceability |
-| **7-Stage CI/CD** | Test → Build → Push → Terraform → Ansible → Deploy → Smoke Test | Zero manual deployments — fail-fast on errors |
-| **Product Catalog API** | Filter by category, price range, and stock availability | Enables product discovery for e-commerce buyers |
-| **Order Processing** | Create orders with tax calculation, stock validation, unique order IDs | Core commerce transaction capability |
-| **Business Metrics API** | Real-time revenue, order count, SKU health, low-stock alerts | Operational visibility for business stakeholders |
-| **Immutable Deployments** | New Docker image per build — never in-place modification | Eliminates configuration drift and snowflake servers |
-| **Zero-SSH Node Management** | Ansible configures EKS workers via AWS SSM — no bastion, no keys | Eliminates SSH attack surface entirely |
-| **IAM Role Assumption** | All cluster access via `sts:AssumeRole` — no static credentials | Compliance-ready, credential-free deployments |
-| **Infrastructure as Code** | VPC, EKS, IAM, KMS, ECR, CloudWatch all in Terraform | One-command environment creation and teardown |
-| **Team Access Management** | 5 IAM groups, 20 named users, scoped policies — all as code | Auditable, reproducible access control |
-| **KMS Encryption** | EKS secrets and ECR images encrypted at rest | Data protection and compliance requirement |
-| **CloudWatch Observability** | CPU, memory, disk, network metrics — 60s intervals, 90-day retention | Proactive incident detection and capacity planning |
-| **Automated Smoke Tests** | 8-endpoint post-deploy validation script | Immediate feedback if deploy broke production |
-| **Multi-AZ Availability** | Pods distributed across availability zones via anti-affinity rules | No single point of failure — 99.9% SLA target |
-| **Rolling Updates** | `maxSurge: 1`, `maxUnavailable: 0` — zero-downtime deploys | No customer-facing downtime during releases |
+  Monitoring                          Azure Monitor metrics and alert
+                                      rules
 
----
+  Repository security                 CodeQL, Dependabot, secret
+                                      protection, push protection
+  -----------------------------------------------------------------------
 
-## 5. Architecture Diagram
+## Application Endpoints
 
-### System Architecture
+  -----------------------------------------------------------------------------------------------------------------------------------------
+  Endpoint                                                                                              Purpose
+  ----------------------------------------------------------------------------------------------------- -----------------------------------
+  [`/`](https://cartflow-api.thankfulforest-0f061758.centralindia.azurecontainerapps.io/)               Application root
 
-```mermaid
-flowchart TD
-    Dev[Developer] -->|git push| GH[GitHub / Git Repository]
-    GH -->|webhook| Jenkins[Jenkins CI Server]
+  [`/health`](https://cartflow-api.thankfulforest-0f061758.centralindia.azurecontainerapps.io/health)   Health-check response
+  -----------------------------------------------------------------------------------------------------------------------------------------
 
-    subgraph Pipeline ["7-Stage Jenkins Pipeline"]
-        S1[1. pytest — Unit Tests] --> S2[2. docker build]
-        S2 --> S3[3. Push → AWS ECR]
-        S3 --> S4[4. terraform apply]
-        S4 --> S5[5. Ansible SSM]
-        S5 --> S6[6. kubectl rollout]
-        S6 --> S7[7. Smoke Test]
-    end
+The health endpoint has returned a healthy response with the API,
+catalog, and orders checks marked `ok`. Re-check the live endpoint
+before relying on its current availability.
 
-    Jenkins --> Pipeline
+## CI/CD Workflow
 
-    subgraph AWS ["AWS us-east-1"]
-        subgraph VPC ["VPC 10.0.0.0/16"]
-            subgraph PUB ["Public Subnets"]
-                NLB[Network Load Balancer]
-            end
-            subgraph PRI ["Private Subnets"]
-                N1[EKS Worker Node 1]
-                N2[EKS Worker Node 2]
-            end
-        end
-        ECR[AWS ECR — Image Registry]
-        KMS[AWS KMS — Encryption]
-        CW[CloudWatch — Metrics & Logs]
-        CT[CloudTrail — Audit]
-        S3[S3 — Terraform State]
-    end
+The application workflow is located at `.github/workflows/ci-cd.yml`.
 
-    Pipeline --> AWS
-    NLB --> N1
-    NLB --> N2
-    N1 & N2 --> CW
+At a high level, the workflow:
+
+1.  Checks out the repository.
+2.  Sets up Python and installs application dependencies.
+3.  Runs automated tests.
+4.  Builds the Docker image.
+5.  Authenticates to Azure through the configured GitHub OIDC
+    integration.
+6.  Pushes the image to Azure Container Registry.
+7.  Deploys the image to Azure Container Apps.
+
+The repository also contains Terraform workflows:
+
+-   `.github/workflows/terraform-ci.yml` --- Terraform checks and plan
+    workflow for changes.
+-   `.github/workflows/terraform-apply.yml` --- manually initiated
+    Terraform apply workflow with an explicit confirmation input and
+    protected GitHub environment.
+
+The Terraform apply workflow has previously completed successfully with
+no infrastructure changes required (`0 added, 0 changed, 0 destroyed`).
+This indicates that the deployed resources matched the Terraform
+configuration at that run; it does not guarantee that every future run
+will be change-free.
+
+## Infrastructure as Code
+
+Terraform configuration is stored in `terraform-azure/`.
+
+The remote backend uses Azure Blob Storage:
+
+-   Storage account: `cartflowtfstate2026`
+-   Container: `tfstate`
+-   State blob: `cartflow-terraform.tfstate`
+
+The remote state allows Terraform runs to use a shared state file rather
+than relying on one developer's local state. Keep the storage account
+private and protect access to the state file because Terraform state can
+contain sensitive values.
+
+Typical Terraform workflow:
+
+1.  Review the Terraform configuration and backend settings.
+2.  Run formatting and validation checks.
+3.  Generate and inspect a plan.
+4.  Apply only after reviewing the plan and satisfying the repository's
+    approval/confirmation controls.
+5.  Verify the resulting Azure resources.
+
+Use the project's actual backend configuration and workflow instructions
+when running Terraform. Do not paste state contents or secrets into
+issues, logs, or the README.
+
+## Identity and Secrets
+
+### GitHub Actions to Azure
+
+GitHub Actions uses Microsoft Entra ID federated credentials (OIDC) to
+authenticate to Azure. This avoids needing a long-lived Azure client
+secret stored as a GitHub Actions secret for that federation flow.
+
+The app registration used for this integration is
+`GitHubActions-CartFlow`. Federated credentials were configured for the
+relevant GitHub workflow contexts, including the main branch, pull
+requests, and Terraform workflows.
+
+### Azure Key Vault
+
+The Key Vault `cartflow-kv-megna-2026` contains the project secret
+`cartflow-demo-message`. The secret value must not be committed to
+GitHub or included in screenshots.
+
+The existence of a secret in Key Vault does not, by itself, prove that
+the running application retrieves and consumes it at runtime. Document
+runtime Key Vault integration only after verifying the relevant
+identity, permissions, and application/configuration code.
+
+## Security
+
+Security controls configured or verified for this repository include:
+
+-   **CodeQL:** Default code-scanning configuration enabled; the setup
+    run completed for Actions and Python analysis.
+-   **Secret protection:** Enabled.
+-   **Push protection:** Enabled to help block pushes containing
+    supported secrets.
+-   **Dependabot alerts:** Enabled; the captured alert page showed no
+    open alerts at the time of review.
+-   **GitHub Actions:** CI/CD and Terraform workflows are maintained in
+    the repository.
+-   **Azure OIDC:** Federated authentication is configured for GitHub
+    Actions.
+-   **Terraform review controls:** The apply workflow uses an explicit
+    confirmation input and protected environment approval controls.
+
+Security dashboards are point-in-time evidence. A clean scan does not
+prove that the project is free of every vulnerability, and alerts can
+change as code and dependencies change.
+
+## Monitoring and Alerting
+
+Monitoring is configured using Azure Monitor and Log Analytics.
+
+### Log Analytics
+
+The Container Apps environment `cartflow-env` is configured with the
+`log-analytics` destination and is connected to workspace
+`workspacecartflowrgb3e8`.
+
+The following log tables were observed to contain records:
+
+-   `ContainerAppConsoleLogs_CL` --- console output, including Flask
+    startup messages and HTTP requests.
+-   `ContainerAppSystemLogs_CL` --- container lifecycle events,
+    including container creation and startup.
+
+Example KQL query for recent console logs:
+
+``` kusto
+ContainerAppConsoleLogs_CL
+| where TimeGenerated > ago(1h)
+| project TimeGenerated, ContainerGroupName_s, Log_s
+| sort by TimeGenerated desc
+| take 30
 ```
 
-### IAM Access Pattern
+Example query to inspect HTTP request and error text:
 
-```mermaid
-flowchart LR
-    U1[cartflow-ci IAM User] -->|sts:AssumeRole| R[cartflow-eks-admin-role]
-    U2[Jenkins Build Agent] -->|sts:AssumeRole| R
-    R -->|1-hour scoped session| EKS[EKS Cluster]
-    R --> CT[CloudTrail Audit Log]
+``` kusto
+ContainerAppConsoleLogs_CL
+| where TimeGenerated > ago(24h)
+| where Log_s contains "HTTP/" or Log_s contains "ERROR"
+| project TimeGenerated, Log_s
+| sort by TimeGenerated desc
+| take 50
 ```
 
-### CI/CD Pipeline Flow
+Log formats depend on what the application writes to stdout/stderr. A
+browser request for `/favicon.ico` returned a `404` in the captured
+logs; this is commonly a missing browser icon and does not by itself
+mean the API health endpoint is failing.
 
-```mermaid
-flowchart LR
-    DEV[Developer] -->|git push| GIT[main branch]
-    GIT -->|trigger| TEST[pytest 24 tests]
-    TEST -->|pass| BUILD[docker build]
-    BUILD -->|tag BUILD_NUMBER| ECR[push to ECR]
-    ECR -->|plan + approve| TF[terraform apply]
-    TF -->|SSM connection| ANS[ansible-playbook]
-    ANS -->|kubectl apply| K8S[EKS RollingUpdate]
-    K8S -->|curl /health| SMOKE[Smoke Test]
-    SMOKE -->|pass| LIVE[Live in Production]
-    TEST -->|fail| ABORT[Pipeline Aborts]
-```
+### CPU metric and alert
 
-### Request Flow
+The Azure Monitor metric `CPU Usage Percentage (Preview)` is available
+for `cartflow-api`. The configured alert is:
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant NLB as Network Load Balancer
-    participant Pod as CartFlow API Pod
-    participant App as Flask Application
+-   **Name:** `CartFlow-High-CPU-Alert`
+-   **Metric:** CPU Usage Percentage (Preview) / `CpuPercentage`
+-   **Aggregation:** Average
+-   **Condition:** Greater than `80%`
+-   **Evaluation frequency:** Every 1 minute
+-   **Lookback period:** 5 minutes
+-   **Severity:** 3 --- Informational
+-   **Action group:** `cartflow-alerts`
 
-    Client->>NLB: HTTP Request
-    NLB->>Pod: Route to healthy pod
-    Pod->>App: Process request
-    App->>App: Validate inputs
-    App->>App: Apply business logic
-    App-->>Pod: JSON Response
-    Pod-->>NLB: HTTP Response
-    NLB-->>Client: Return response
-```
+The action group contains a verified email receiver named
+`CartFlowEmail`. An Azure Monitor **sample static-threshold action-group
+test completed successfully**, and the sample notification was received
+by email.
 
-### Component Interactions
+> **Testing distinction:** The action-group test verifies the
+> notification path. It does not prove that the real CartFlow CPU alert
+> has fired due to CPU exceeding 80%. At the time of the captured metric
+> screenshot, CPU usage was 0%.
 
-| Component | Interacts With | Protocol |
-|---|---|---|
-| Jenkins | GitHub, ECR, EKS, Terraform, Ansible | HTTPS, AWS API |
-| Ansible | EKS Worker Nodes | AWS SSM (no SSH) |
-| EKS Pods | CloudWatch | AWS SDK |
-| Terraform | AWS APIs (VPC, EKS, IAM, KMS, ECR) | HTTPS |
-| NLB | CartFlow API Pods | HTTP/TCP |
-| Jenkins | `sts:AssumeRole` → EKS | AWS STS API |
+### Monitoring follow-up
 
----
+-   Consider adding an alert for replica restarts or another operational
+    signal after confirming the appropriate metric is available.
+-   Consider moving the Flask app from its built-in development server
+    to a production WSGI server such as Gunicorn before presenting it as
+    production-ready.
+-   Azure Monitor alerting and Log Analytics can incur charges. Review
+    current pricing and your Azure cost management settings.
 
-## 6. Tech Stack
+## Repository Structure
 
-### Backend
+The main project files include the application, Docker configuration,
+GitHub Actions workflows, Terraform configuration, and documentation
+screenshots. The exact tree may evolve; a representative structure is:
 
-| Technology | Version | Purpose |
-|---|---|---|
-| Python | 3.11 | Primary application runtime |
-| Flask | 3.0.0 | REST API framework |
-| pytest | 7.4.0 | Unit and integration testing |
-| pytest-cov | 4.1.0 | Test coverage reporting |
-
-### DevOps & CI/CD
-
-| Technology | Purpose |
-|---|---|
-| Jenkins | On-premise declarative CI/CD pipeline — 7 stages |
-| GitHub Actions | Cloud-native CI/CD with OIDC authentication |
-| Docker | Application containerization — immutable image per build |
-| Ansible | Agentless node configuration via AWS SSM |
-
-### Infrastructure (IaC)
-
-| Technology | Version | Purpose |
-|---|---|---|
-| Terraform | 1.x | Infrastructure as Code — VPC, EKS, IAM, KMS, ECR |
-| terraform-aws-modules/vpc | ~5.0 | Production-grade VPC with public/private subnets |
-| terraform-aws-modules/eks | ~20.0 | Managed EKS cluster with node groups |
-
-### Cloud (AWS)
-
-| Service | Purpose |
-|---|---|
-| AWS EKS | Managed Kubernetes cluster — multi-AZ, self-healing |
-| AWS ECR | Private container image registry with vulnerability scanning |
-| AWS VPC | Network isolation — public/private subnet architecture |
-| AWS IAM | Identity and access management — roles, groups, users |
-| AWS KMS | Encryption key management — EKS secrets + ECR images |
-| AWS SSM | Systems Manager — SSH-free node access for Ansible |
-| AWS STS | Security Token Service — temporary role assumption |
-| AWS S3 | Terraform remote state backend |
-| AWS CloudTrail | API audit logging — every action recorded |
-
-### Monitoring & Observability
-
-| Tool | Purpose |
-|---|---|
-| Amazon CloudWatch | Container Insights, custom metrics (CPU/mem/disk/net) |
-| CloudWatch Logs | Application logs — `/cartflow/nodes`, `/cartflow/application` |
-| CloudTrail | Immutable audit trail — every AWS API call with actor + timestamp |
-| Prometheus Annotations | Pod annotations for future Prometheus scraping |
-
-### Kubernetes
-
-| Resource | Purpose |
-|---|---|
-| Namespace | Isolated `cartflow` namespace |
-| Deployment | RollingUpdate strategy — 2 replicas, anti-affinity |
-| Service | NLB LoadBalancer — external traffic routing |
-| ConfigMap | Application environment configuration |
-
----
-
-## 7. Folder Structure
-
-```text
-Project 8/                          # CartFlow Commerce Platform root
+``` text
+cartflow-azure-devops/
 ├── app/
-│   ├── app.py                      # Flask REST API — all business logic
-│   └── requirements.txt            # Python dependencies
-│
-├── tests/
-│   └── test_app.py                 # 24 pytest test cases — full API coverage
-│
-├── k8s/
-│   ├── namespace.yaml              # cartflow Kubernetes namespace
-│   ├── configmap.yaml              # Application environment variables
-│   ├── deployment.yaml             # RollingUpdate, resource limits, health probes
-│   └── service.yaml                # NLB LoadBalancer — external ingress
-│
-├── terraform/
-│   ├── main.tf                     # VPC · EKS · IAM Role · KMS · ECR · CloudWatch
-│   ├── users.tf                    # 5 IAM groups · 20 named users as code
-│   ├── variables.tf                # All input variables with defaults
-│   ├── outputs.tf                  # Cluster endpoint, ECR URL, kubectl command
-│   └── terraform.tfvars.example   # Template for environment configuration
-│
-├── ansible/
-│   ├── site.yml                    # Main playbook — orchestrates all roles
-│   ├── inventory.yml               # SSM-based dynamic inventory
-│   ├── ansible.cfg                 # Ansible configuration
-│   ├── group_vars/
-│   │   └── all.yml                 # Global variables for all nodes
-│   └── roles/
-│       ├── common/                 # System update, packages, timezone, users
-│       ├── security/               # SSH hardening, firewalld, auto-updates
-│       └── monitoring/             # CloudWatch agent, metrics, log shipping
-│
-├── scripts/
-│   ├── pre-destroy.sh              # Safe teardown — removes ELBs before tf destroy
-│   ├── local-dev.sh                # Local Docker development runner
-│   └── smoke-test.sh               # 8-endpoint post-deploy validation
-│
+│   ├── app.py
+│   └── requirements.txt
+├── terraform-azure/
+│   └── ... Terraform configuration ...
 ├── .github/
 │   └── workflows/
-│       └── ci-cd.yml               # GitHub Actions — OIDC auth, ECR, EKS deploy
-│
+│       ├── ci-cd.yml
+│       ├── terraform-ci.yml
+│       └── terraform-apply.yml
 ├── docs/
-│   └── architecture.md             # Detailed architecture and design guide
-│
-├── Dockerfile                      # python:3.11-slim · healthcheck · non-root user
-├── Jenkinsfile                     # 7-stage declarative pipeline
-├── .gitignore                      # Excludes .venv, .terraform, tfvars, secrets
-└── README.md                       # This file
+│   └── images/
+│       ├── 02-project-architecture.png
+│       ├── 02-azure-container-app.png
+│       └── ... screenshots 03–21 ...
+├── Dockerfile
+└── README.md
 ```
 
----
+Confirm the filenames against the actual repository before committing
+this README. If the Dockerfile or any workflow lives in a different
+location, update this tree accordingly.
 
-## 8. API Documentation
+## Screenshots
 
-### API Overview
+Place the screenshots in `docs/images/` and use the filenames below.
+Keep only screenshots that actually exist in the repository and update
+the links if your names differ.
 
-CartFlow exposes a versioned REST API (`/api/v1`) for product catalog and order management, plus platform endpoints for health monitoring and business metrics. All responses are JSON. No authentication is required in this version (designed for internal microservice use behind a load balancer).
+  -----------------------------------------------------------------------
+  File                                Evidence
+  ----------------------------------- -----------------------------------
+  `02-project-architecture.png`       End-to-end architecture
 
-### Endpoints
+  `02-azure-container-app.png`        Container App overview and
+                                      application URL
 
-| Method | Endpoint | Description | Status Codes |
-|---|---|---|---|
-| `GET` | `/` | Platform index — service info, version, endpoint map | 200 |
-| `GET` | `/health` | Health check — liveness and readiness probe target | 200 |
-| `GET` | `/api/v1/products` | List all products with optional filters | 200 |
-| `GET` | `/api/v1/products/:id` | Get single product by ID | 200, 404 |
-| `POST` | `/api/v1/orders` | Create a new order | 201, 400, 404, 409, 422 |
-| `GET` | `/api/v1/orders` | List orders, optionally filter by customer email | 200 |
-| `GET` | `/api/v1/orders/:id` | Get single order by ID | 200, 404 |
-| `GET` | `/metrics/summary` | Platform business metrics summary | 200 |
+  `03-container-registry.png`         ACR repository/image
 
-### Query Parameters — Product Catalog
+  `04-cicd-pipeline.png`              Successful application CI/CD run
 
-| Parameter | Type | Description | Example |
-|---|---|---|---|
-| `category` | string | Filter by product category | `?category=Electronics` |
-| `min_price` | float | Minimum price filter | `?min_price=50` |
-| `max_price` | float | Maximum price filter | `?max_price=200` |
-| `in_stock` | boolean | Show only in-stock products | `?in_stock=true` |
+  `05-terraform-plan.png`             Terraform plan summary
 
-### Request Example — Create Order
+  `06-api-health-check.png`           Health endpoint JSON response
 
-```json
-POST /api/v1/orders
-Content-Type: application/json
+  `07-terraform-state.png`            Terraform state blob in Azure
+                                      Storage
 
-{
-  "customer_email": "buyer@example.com",
-  "items": [
-    { "product_id": "p001", "quantity": 2 },
-    { "product_id": "p003", "quantity": 1 }
-  ]
-}
+  `08-github-oidc.png`                Entra ID federated credentials
+
+  `09-key-vault.png`                  Key Vault secret listing (never
+                                      show secret values)
+
+  `10–15`                             Additional GitHub security and
+                                      scanning evidence; align filenames
+                                      with your captured screenshots
+
+  `16-secret-protection.png`          Secret Protection and Push
+                                      protection settings
+
+  `17-cpu-metric.png`                 CPU Usage Percentage metric chart
+
+  `18-cpu-alert-rule.png`             CPU threshold and evaluation
+                                      settings
+
+  `19-cpu-alert-enabled.png`          Enabled CartFlow CPU alert rule
+
+  `20-alert-action-group.png`         Successful action-group test result
+
+  `21-alert-test-email.png`           Sample Azure Monitor email received
+  -----------------------------------------------------------------------
+
+### Example screenshot embedding
+
+``` markdown
+![CartFlow CPU metric](docs/images/17-cpu-metric.png)
+
+*Azure Monitor CPU Usage Percentage metric for the CartFlow Container App.*
 ```
 
-### Response Example — Order Created `201`
+## Run Locally
 
-```json
-{
-  "order_id": "ORD-FD512FE9",
-  "customer_email": "buyer@example.com",
-  "status": "confirmed",
-  "items": [
-    {
-      "product_id": "p001",
-      "sku": "ELEC-WNC-001",
-      "name": "Wireless Noise-Cancelling Headphones",
-      "quantity": 2,
-      "unit_price": 149.99,
-      "line_total": 299.98
-    }
-  ],
-  "subtotal": 324.97,
-  "tax": 26.00,
-  "total": 350.97,
-  "currency": "USD",
-  "estimated_delivery": "3-5 business days",
-  "created_at": "2026-07-07T10:30:00Z"
-}
+These commands are a starting point for local development. Run them from
+the repository root and adapt the paths if your checkout differs.
+
+### 1. Create and activate a virtual environment (Windows Git Bash)
+
+``` bash
+python -m venv venv
+source venv/Scripts/activate
 ```
 
-### Response Example — Health Check `200`
+### 2. Install dependencies
 
-```json
-{
-  "status": "healthy",
-  "service": "cartflow-api",
-  "version": "2.0.0",
-  "checks": {
-    "api": "ok",
-    "catalog": "ok",
-    "orders": "ok"
-  },
-  "timestamp": "2026-07-07T10:30:00Z"
-}
-```
-
-### Error Handling
-
-| HTTP Status | Scenario |
-|---|---|
-| `400` | Missing or malformed request body |
-| `404` | Product or order not found |
-| `409` | Insufficient stock for requested quantity |
-| `422` | Missing required fields (`customer_email`, `items`) |
-
----
-
-## 9. Security Implementation
-
-### IAM Least Privilege
-
-No user or service has direct cluster admin access. All access is brokered through a single assumable IAM role with time-limited sessions.
-
-```
-Developer / Jenkins ──► sts:AssumeRole ──► cartflow-eks-admin-role ──► EKS
-                         (1-hour TTL)        (Terraform managed)
-```
-
-### Team Access Matrix
-
-| Group | Policy | Members |
-|---|---|---|
-| `platform-engineering` | EKS + ECR Full + CloudWatch ReadOnly | 7 engineers |
-| `commerce-developers` | ECR PowerUser + CloudWatch Logs ReadOnly | 4 developers |
-| `security-team` | IAM ReadOnly + CloudTrail ReadOnly | 3 analysts |
-| `observability-team` | CloudWatch + X-Ray ReadOnly | 3 engineers |
-| `data-team` | S3 Full + RDS ReadOnly + Glue | 3 engineers |
-
-### Security Controls
-
-| Control | Implementation |
-|---|---|
-| **No static credentials** | All cluster access via `sts:AssumeRole` — 1-hour scoped sessions |
-| **Secrets encryption** | KMS `alias/eks/cartflow-prod` encrypts all Kubernetes secrets at rest |
-| **Image security** | ECR `scan_on_push = true` — vulnerability scanning on every push |
-| **SSH eliminated** | Workers in private subnets — Ansible via SSM only, no SSH port open |
-| **Firewall hardening** | `firewalld` on every node — only ports 443, 22, 6443, 10250 allowed |
-| **Root login disabled** | SSH `PermitRootLogin no` enforced via Ansible |
-| **Auto security patches** | `dnf-automatic` timer enabled — security updates applied automatically |
-| **Network isolation** | Workers in private subnets — no public IPs on any worker node |
-| **Audit trail** | CloudTrail records every AWS API call with actor, timestamp, region |
-| **Image immutability** | New Docker image per build — no in-place modification of running containers |
-
-### Ansible SSM Firewall Fix
-
-> A critical production decision: `immediate: yes` is set on every `firewalld` rule. Without this flag, activating the firewall terminates the SSM session mid-playbook — leaving nodes half-configured. This was identified as a real production edge case and explicitly handled.
-
----
-
-## 10. CI/CD Pipeline
-
-### Pipeline Overview
-
-CartFlow implements two parallel CI/CD systems — Jenkins for on-premise enterprise environments, and GitHub Actions for cloud-native OIDC-based workflows.
-
-### Jenkins — 7-Stage Declarative Pipeline
-
-```mermaid
-flowchart LR
-    T[Test\npytest] --> B[Build\ndocker build]
-    B --> P[Push\nECR]
-    P --> TF[Terraform\napply]
-    TF --> AN[Ansible\nSSM]
-    AN --> K[Kubernetes\nrollout]
-    K --> SM[Smoke\nTest]
-
-    style T fill:#22C55E,color:#fff
-    style SM fill:#22C55E,color:#fff
-```
-
-| Stage | Action | On Failure |
-|---|---|---|
-| **Test** | `pytest tests/` — 24 test cases, fail-fast | Pipeline aborts immediately |
-| **Build** | `docker build` with layer cache optimization | Pipeline aborts |
-| **Push ECR** | Tag `:{BUILD_NUMBER}` + `:latest` — push both | Pipeline aborts |
-| **Terraform Apply** | `plan` → manual approval gate → `apply` | Requires human intervention |
-| **Ansible SSM** | common → security → monitoring roles | `ignore_errors` on optional services only |
-| **Kubernetes Rollout** | `sts:AssumeRole` → `kubectl apply` → `rollout status` | Pipeline aborts, previous version stays live |
-| **Smoke Test** | `curl /health` against live Load Balancer URL | Pipeline aborts, alert triggered |
-
-### GitHub Actions — OIDC Cloud Pipeline
-
-- **OIDC Authentication** — No long-lived AWS credentials stored in GitHub secrets
-- **Layer caching** — Docker build cache via GitHub Actions cache API
-- **Environment gate** — `production` environment requires reviewer approval before deploy
-- **Parallel validation** — Tests run independently from build/push
-
-### Rollback Strategy
-
-The Kubernetes RollingUpdate strategy (`maxUnavailable: 0`) ensures the previous version remains live if the new deployment fails. Manual rollback:
-
-```bash
-kubectl rollout undo deployment/cartflow-api -n cartflow
-```
-
----
-
-## 11. Deployment Architecture
-
-### Infrastructure Overview
-
-```mermaid
-flowchart TB
-    Internet -->|HTTPS| NLB[Network Load Balancer\nPublic Subnet]
-
-    subgraph VPC ["AWS VPC — 10.0.0.0/16 — us-east-1"]
-        subgraph PUB ["Public Subnets — 10.0.101.0/24 · 10.0.102.0/24"]
-            NLB
-            NAT[NAT Gateway]
-        end
-        subgraph PRI ["Private Subnets — 10.0.1.0/24 · 10.0.2.0/24"]
-            subgraph EKS ["EKS Cluster — cartflow-prod — K8s 1.31"]
-                P1[cartflow-api Pod\nt3.small Node — AZ-a]
-                P2[cartflow-api Pod\nt3.small Node — AZ-b]
-            end
-        end
-    end
-
-    NLB --> P1
-    NLB --> P2
-    PRI --> NAT
-    NAT --> Internet
-
-    ECR[AWS ECR\nImage Registry] --> EKS
-    KMS[AWS KMS\nEncryption] --> EKS
-    CW[CloudWatch\nMetrics & Logs] --> EKS
-```
-
-### Infrastructure Resources
-
-```
-AWS us-east-1
-├── VPC  10.0.0.0/16
-│   ├── Private Subnets  10.0.1.0/24 · 10.0.2.0/24   (EKS workers — no public IPs)
-│   └── Public Subnets   10.0.101.0/24 · 10.0.102.0/24  (NLB endpoints)
-├── EKS  cartflow-prod  Kubernetes 1.31
-│   └── Node Group — 2× t3.small · SSM enabled · min 1 / max 4 · multi-AZ
-├── ECR  cartflow  (KMS encrypted · scan-on-push enabled)
-├── KMS  alias/eks/cartflow-prod  (EKS secrets + ECR encryption)
-├── IAM  cartflow-eks-admin-role + 5 groups + 20 users (all as code)
-├── CloudWatch  /cartflow/nodes · /cartflow/application — 90-day retention
-├── CloudTrail  All API events — tamper-proof, region-wide
-└── S3  cartflow-tfstate-prod  (Terraform state backend)
-```
-
-### Kubernetes Resources
-
-| Resource | Configuration |
-|---|---|
-| Namespace | `cartflow` — isolated from other workloads |
-| Replicas | 2 pods — distributed across AZs via anti-affinity |
-| Update Strategy | RollingUpdate — `maxSurge: 1`, `maxUnavailable: 0` |
-| CPU Request/Limit | 100m / 500m |
-| Memory Request/Limit | 128Mi / 512Mi |
-| Liveness Probe | `GET /health` every 10s — restarts unhealthy pods |
-| Readiness Probe | `GET /health` every 5s — gates traffic until ready |
-
----
-
-## 12. Monitoring & Logging
-
-### CloudWatch Agent Configuration
-
-Deployed to all EKS worker nodes via Ansible role. Collects:
-
-| Metric | Interval | Namespace |
-|---|---|---|
-| CPU usage (idle/user/system) | 60 seconds | `cartflow/Nodes` |
-| Memory (used %, available) | 60 seconds | `cartflow/Nodes` |
-| Disk usage (/) | 60 seconds | `cartflow/Nodes` |
-| Network (bytes sent/recv) | 60 seconds | `cartflow/Nodes` |
-
-### Log Groups
-
-| Log Group | Retention | Contents |
-|---|---|---|
-| `/cartflow/nodes` | 90 days | System messages, security logs, audit logs |
-| `/cartflow/application` | 30 days | Application logs |
-| `/cartflow/access-logs` | 30 days | HTTP access logs |
-
-### Audit Trail
-
-CloudTrail records every AWS API call with:
-- **Actor** — IAM user or role ARN
-- **Action** — API call made
-- **Resource** — Target resource ARN
-- **Timestamp** — UTC timestamp
-- **Session** — `jenkins-deploy-{BUILD_NUMBER}` for traceability
-
-Every Jenkins deployment is uniquely identifiable in CloudTrail, linking a production change back to a specific build number, commit, and developer.
-
-### Prometheus Integration
-
-Pod annotations are pre-configured for future Prometheus scraping:
-
-```yaml
-annotations:
-  prometheus.io/scrape: "true"
-  prometheus.io/path: "/metrics/summary"
-  prometheus.io/port: "5000"
-```
-
----
-
-## 13. Installation & Setup
-
-### Prerequisites
-
-| Tool | Version | Purpose |
-|---|---|---|
-| Python | 3.11+ | Application runtime |
-| Docker Desktop | Latest | Container build and run |
-| Terraform | 1.0+ | Infrastructure provisioning |
-| AWS CLI | v2 | Cloud operations |
-| kubectl | Latest | Kubernetes management |
-| Ansible | 2.21+ | Node configuration |
-
-### Clone Repository
-
-```bash
-git clone <repository-url>
-cd "Project 8"
-```
-
-### Environment Setup
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
+``` bash
 pip install -r app/requirements.txt
 ```
 
-### Run Tests
+### 3. Run the Flask app
 
-```bash
-pytest tests/ -v
-# Expected: 24 passed
+Use the application's documented startup command or entry point. For
+example, if `app/app.py` exposes the Flask application as `app`, run:
+
+``` bash
+python app/app.py
 ```
 
-### Run API Locally
+### 4. Test the health endpoint
 
-```bash
-PORT=8080 python app/app.py
-# API available at http://localhost:8080
+In another terminal:
+
+``` bash
+curl http://localhost:5000/health
 ```
 
-### Docker Setup
+Expected response should indicate a healthy status and the configured
+checks. Exact fields may change with application code.
 
-```bash
-# Build image
-docker build -t cartflow:dev .
+## Deployment and Verification
 
-# Run container
-docker run -p 8080:5000 cartflow:dev
-```
+After a workflow run, verify the deployment rather than relying only on
+a green GitHub Actions status:
 
-### Smoke Test
+1.  Confirm the application workflow completed successfully.
+2.  Check that the expected image tag exists in ACR.
+3.  Confirm the `cartflow-api` Container App revision is
+    healthy/running.
+4.  Open the live `/health` endpoint.
+5.  Inspect console and system logs in Log Analytics.
+6.  Confirm the CPU alert rule is enabled and its action group is
+    attached.
+7.  Review GitHub security alerts and dependency updates periodically.
 
-```bash
-bash scripts/smoke-test.sh http://localhost:8080
-# Expected: 8 passed, 0 failed
-```
+## Key Learning Outcomes
 
-### Terraform Setup (AWS account required)
+This project demonstrates practical experience with:
 
-```bash
-cp terraform/terraform.tfvars.example terraform/terraform.tfvars
-# Edit terraform.tfvars — set aws_account_id
+-   Building and deploying a containerized Python API.
+-   Creating CI/CD workflows with GitHub Actions.
+-   Publishing container images to Azure Container Registry.
+-   Deploying workloads to Azure Container Apps.
+-   Managing cloud infrastructure with Terraform and remote state.
+-   Configuring GitHub OIDC federation with Microsoft Entra ID.
+-   Storing secrets in Azure Key Vault.
+-   Enabling code scanning and secret-protection features in GitHub.
+-   Querying application and system logs using KQL.
+-   Configuring Azure Monitor metric alerts and email action groups.
 
-cd terraform
-terraform init -backend=false   # local validation
-terraform validate               # syntax check
-```
+## Future Improvements
 
-### Kubernetes Manifest Validation (local)
+-   Run Flask behind Gunicorn or another production WSGI server.
+-   Add a container replica restart alert after validating the available
+    metric and dimensions.
+-   Add an alert for failed health checks or elevated HTTP 5xx responses
+    if the telemetry supports it.
+-   Add a dashboard that combines CPU, memory, request, and replica
+    metrics.
+-   Add a documented test strategy for application endpoints and
+    deployment smoke tests.
+-   Review Azure resource costs and remove unused resources when the
+    project is not being demonstrated.
+-   Keep dependencies updated and review CodeQL and Dependabot findings
+    regularly.
 
-```bash
-python3 -c "
-import yaml, glob
-for f in glob.glob('k8s/*.yaml'):
-    with open(f) as fh: yaml.safe_load(fh)
-    print(f'[PASS] {f}')
-"
-```
+------------------------------------------------------------------------
 
-### Ansible Syntax Check (local)
+## Author
 
-```bash
-cd ansible
-ansible-playbook site.yml --syntax-check
-```
+**Megna Pradeep**
 
-### Verification Steps
+-   GitHub: [Megna0710](https://github.com/Megna0710)
+-   Project repository:
+    [cartflow-azure-devops](https://github.com/Megna0710/cartflow-azure-devops)
 
-| Check | Command | Expected Result |
-|---|---|---|
-| Unit tests | `pytest tests/ -v` | 24 passed |
-| API health | `curl localhost:8080/health` | `{"status": "healthy"}` |
-| Docker smoke test | `bash scripts/smoke-test.sh http://localhost:8080` | 8 passed, 0 failed |
-| Terraform validation | `terraform validate` | Success! The configuration is valid |
-| K8s YAML validation | Python yaml check | 4 PASS |
-| Ansible syntax | `ansible-playbook --syntax-check` | `playbook: site.yml` |
+------------------------------------------------------------------------
 
----
-
-## 14. Challenges & Learnings
-
-### Technical Challenges
-
-**1. Firewall + SSM Session Conflict**
-Enabling `firewalld` during Ansible configuration terminated the AWS SSM connection, leaving nodes in a partially configured state. Resolution: Set `immediate: yes` on every `firewalld` task — rules are applied to the running firewall without a service reload, keeping the SSM session alive throughout the playbook execution.
-
-**2. EKS Backend Authentication Without Static Credentials**
-Terraform's S3 backend requires AWS credentials to initialize. In local environments without configured credentials, `terraform init` fails. Resolution: Use `terraform init -backend=false` for local validation, reserving full init for CI environments with proper IAM role configuration.
-
-**3. Port 5000 Conflict on macOS**
-macOS AirPlay Receiver occupies port 5000 by default, preventing Flask from binding. Resolution: Inject port via `PORT` environment variable — `PORT=8080 python app/app.py` — avoiding any system-level conflict.
-
-**4. Zero-SSH Node Management at Scale**
-Configuring EKS worker nodes in private subnets with no public IPs requires a non-SSH mechanism. Resolution: AWS Systems Manager (SSM) via `community.aws.aws_ssm` Ansible connection plugin — no bastion host, no key management, no open SSH port.
-
-### Architecture Challenges
-
-**IAM Role Trust Design**
-Allowing both an IAM user and Jenkins to assume the same role requires carefully scoped trust policies. The trust policy uses explicit `Principal.AWS` ARN lists rather than wildcards — ensuring only authorized identities can assume the role, auditable via CloudTrail.
-
-**Multi-AZ Pod Distribution**
-Default Kubernetes scheduling does not guarantee pods land on different nodes. Resolution: `podAntiAffinity` with `preferredDuringSchedulingIgnoredDuringExecution` distributes pods across nodes using `topologyKey: kubernetes.io/hostname`.
-
-### Key Learnings
-
-- GitOps requires discipline across all layers — not just application code, but IaC, configuration, and access must all be version-controlled
-- `immediate: yes` in Ansible firewalld tasks is not optional in SSM-managed environments — it is a hard requirement
-- Immutable infrastructure (new image per build) eliminates an entire class of debugging problems — you always know exactly what is running
-- IAM role assumption with CloudTrail creates a complete, auditable deployment chain: commit → build → role session → cluster action — all traceable
-
-### Improvements Made
-
-- Replaced `datetime.utcnow()` (deprecated in Python 3.12+) with timezone-aware `datetime.now(timezone.utc)` throughout the API
-- Added `podAntiAffinity` to Kubernetes deployment for genuine multi-AZ distribution
-- Added network metrics (`net_bytes_sent`, `net_bytes_recv`) to CloudWatch agent config beyond the baseline reference implementation
-- Added ECR lifecycle policy to cap stored images at 10, preventing unbounded registry growth
-- Added `kubelet` port 10250 to firewalld allowlist — required for EKS node readiness probes
-
----
-
-## 15. Future Enhancements
-
-| Enhancement | Description | Business Impact |
-|---|---|---|
-| **PostgreSQL Integration** | Replace in-memory catalog/orders with persistent RDS PostgreSQL | Data durability — orders survive pod restarts |
-| **Redis Cache** | Cache product catalog with TTL-based invalidation | Reduce API latency by 60-80% under load |
-| **JWT Authentication** | Bearer token auth on all `/api/v1/` endpoints | Secure multi-tenant API access |
-| **Horizontal Pod Autoscaler** | Scale pods automatically based on CPU/RPS metrics | Handle traffic spikes without manual intervention |
-| **Prometheus + Grafana** | Replace CloudWatch metrics with Prometheus scraping + Grafana dashboards | Rich visualization, open-source observability stack |
-| **Stripe Payment Integration** | Payment processing API with webhook handling | Complete purchase-to-confirmation flow |
-| **Inventory Service** | Dedicated microservice for real-time stock management | Prevent overselling at scale |
-| **Helm Charts** | Package Kubernetes manifests as versioned Helm charts | Standardized, parameterized deployment across environments |
-| **ArgoCD GitOps** | Replace Jenkins kubectl with ArgoCD continuous deployment | Declarative, drift-detection based Kubernetes GitOps |
-| **Terraform Workspaces** | Separate state for dev/staging/production environments | Safe environment promotion pipeline |
-| **AWS WAF** | Web Application Firewall in front of NLB | Protection against OWASP Top 10 at the edge |
-| **OpenTelemetry Tracing** | Distributed tracing across all API requests | Pinpoint latency bottlenecks in production |
-
----
-
-## License
-
-Learnsyte Learning Private Limited **(Skillfyme)**
+*This README documents the configuration and test results observed
+during project development. Re-check live endpoints, cloud resource
+settings, workflow filenames, and screenshot paths before publishing
+changes.*
