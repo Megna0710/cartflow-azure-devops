@@ -51,7 +51,3 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
-
-# AWS CLI temp
-tests/aws/
-tests/awscliv2.zip
